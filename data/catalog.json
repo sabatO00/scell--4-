@@ -1,0 +1,221 @@
+{
+  "products": [
+    {
+      "id": "iph-13-128-meianoite",
+      "nome": "iPhone 13",
+      "modelo": "iPhone 13",
+      "armazenamento": "128GB",
+      "cor": "Meia-noite",
+      "condicao": "Seminovo",
+      "bateria": 92,
+      "preco": 2699,
+      "precoPromo": null,
+      "parcelas": 10,
+      "estoque": 3,
+      "garantia": "90 dias S CELL",
+      "status": "disponivel",
+      "destaque": false,
+      "vendidos": 18,
+      "dataAdicionado": "2026-06-01",
+      "imagens": [
+        "https://images.unsplash.com/photo-1632661674596-df8be070a5c5?w=800&q=80"
+      ],
+      "descricao": "iPhone 13 128GB em ótimo estado de conservação, testado e aprovado pela equipe técnica da S CELL. Ideal para quem busca performance com o melhor custo-benefício."
+    },
+    {
+      "id": "iph-14-128-estelar",
+      "nome": "iPhone 14",
+      "modelo": "iPhone 14",
+      "armazenamento": "128GB",
+      "cor": "Estelar",
+      "condicao": "Seminovo",
+      "bateria": 94,
+      "preco": 3199,
+      "precoPromo": null,
+      "parcelas": 10,
+      "estoque": 5,
+      "garantia": "90 dias S CELL",
+      "status": "disponivel",
+      "destaque": false,
+      "vendidos": 24,
+      "dataAdicionado": "2026-06-10",
+      "imagens": [
+        "https://images.unsplash.com/photo-1663499482523-1c0c1bae4ce1?w=800&q=80"
+      ],
+      "descricao": "iPhone 14 128GB seminovo, com excelente saúde de bateria e visual impecável. Acompanha avaliação técnica completa de 40 pontos feita pela S CELL."
+    },
+    {
+      "id": "iph-15-128-preto",
+      "nome": "iPhone 15",
+      "modelo": "iPhone 15",
+      "armazenamento": "128GB",
+      "cor": "Preto",
+      "condicao": "Seminovo",
+      "bateria": 95,
+      "preco": 3699,
+      "precoPromo": 3399,
+      "parcelas": 12,
+      "estoque": 2,
+      "garantia": "90 dias S CELL",
+      "status": "ultimas",
+      "destaque": true,
+      "vendidos": 31,
+      "dataAdicionado": "2026-07-02",
+      "imagens": [
+        "https://images.unsplash.com/photo-1695048065332-38d64d7d1e0b?w=800&q=80"
+      ],
+      "descricao": "iPhone 15 128GB, um dos modelos mais procurados da loja. Bateria com saúde de 95%, sem marcas de uso visíveis, acompanha carregador USB-C."
+    },
+    {
+      "id": "iph-15pro-256-titanio",
+      "nome": "iPhone 15 Pro",
+      "modelo": "iPhone 15 Pro",
+      "armazenamento": "256GB",
+      "cor": "Titânio Natural",
+      "condicao": "Seminovo",
+      "bateria": 93,
+      "preco": 5299,
+      "precoPromo": null,
+      "parcelas": 12,
+      "estoque": 1,
+      "garantia": "90 dias S CELL",
+      "status": "ultimas",
+      "destaque": false,
+      "vendidos": 9,
+      "dataAdicionado": "2026-05-20",
+      "imagens": [
+        "https://images.unsplash.com/photo-1696446702813-6019437cd1a5?w=800&q=80"
+      ],
+      "descricao": "iPhone 15 Pro 256GB em titânio natural, câmera profissional e chip A17 Pro. Estado de conservação excelente, ideal para quem exige o máximo de performance."
+    },
+    {
+      "id": "iph-16-128-branco",
+      "nome": "iPhone 16",
+      "modelo": "iPhone 16",
+      "armazenamento": "128GB",
+      "cor": "Branco",
+      "condicao": "Novo",
+      "bateria": 100,
+      "preco": 4199,
+      "precoPromo": null,
+      "parcelas": 12,
+      "estoque": 6,
+      "garantia": "1 ano Apple + garantia S CELL",
+      "status": "disponivel",
+      "destaque": true,
+      "vendidos": 12,
+      "dataAdicionado": "2026-08-05",
+      "imagens": [
+        "https://images.unsplash.com/photo-1662947995764-06e04125f0c1?w=800&q=80"
+      ],
+      "descricao": "iPhone 16 128GB lacrado, com nota fiscal e garantia de fábrica. O mais novo lançamento disponível na S CELL."
+    },
+    {
+      "id": "iph-12-64-azul",
+      "nome": "iPhone 12",
+      "modelo": "iPhone 12",
+      "armazenamento": "64GB",
+      "cor": "Azul",
+      "condicao": "Usado",
+      "bateria": 87,
+      "preco": 1899,
+      "precoPromo": 1699,
+      "parcelas": 8,
+      "estoque": 0,
+      "garantia": "60 dias S CELL",
+      "status": "esgotado",
+      "destaque": false,
+      "vendidos": 27,
+      "dataAdicionado": "2026-04-11",
+      "imagens": [
+        "https://images.unsplash.com/photo-1603921326210-6edd2d60ca68?w=800&q=80"
+      ],
+      "descricao": "iPhone 12 64GB, ótima opção de entrada. Funcionamento 100% testado pela equipe técnica."
+    }
+  ],
+  "services": [
+    {
+      "id": "tela",
+      "nome": "Troca de tela",
+      "preco": 350,
+      "ativo": true,
+      "descricao": "Substituição da tela por peça de qualidade, com teste completo de toque e cores.",
+      "mensagem": ""
+    },
+    {
+      "id": "bateria",
+      "nome": "Troca de bateria",
+      "preco": 220,
+      "ativo": true,
+      "descricao": "Troca da bateria original por uma nova, recuperando a autonomia do aparelho.",
+      "mensagem": ""
+    },
+    {
+      "id": "conector",
+      "nome": "Conector de carga",
+      "preco": 180,
+      "ativo": true,
+      "descricao": "Reparo ou troca do conector de carga para o aparelho voltar a carregar normalmente.",
+      "mensagem": ""
+    },
+    {
+      "id": "software",
+      "nome": "Problemas de software",
+      "preco": 120,
+      "ativo": true,
+      "descricao": "Diagnóstico e correção de travamentos, lentidão, erros de sistema e atualizações.",
+      "mensagem": ""
+    },
+    {
+      "id": "camera",
+      "nome": "Câmera",
+      "preco": 280,
+      "ativo": true,
+      "descricao": "Reparo ou substituição de câmera traseira ou frontal com defeito.",
+      "mensagem": ""
+    },
+    {
+      "id": "alto-falante",
+      "nome": "Alto-falante",
+      "preco": 150,
+      "ativo": true,
+      "descricao": "Troca do alto-falante para restaurar a qualidade do som do aparelho.",
+      "mensagem": ""
+    },
+    {
+      "id": "microfone",
+      "nome": "Microfone",
+      "preco": 150,
+      "ativo": true,
+      "descricao": "Reparo do microfone para chamadas e gravações com áudio nítido novamente.",
+      "mensagem": ""
+    },
+    {
+      "id": "face-id",
+      "nome": "Face ID",
+      "preco": null,
+      "ativo": true,
+      "descricao": "Diagnóstico e reparo do sistema de reconhecimento facial. Valor sob orçamento.",
+      "mensagem": ""
+    },
+    {
+      "id": "diagnostico",
+      "nome": "Diagnóstico técnico",
+      "preco": 40,
+      "ativo": true,
+      "descricao": "Avaliação completa do aparelho para identificar a causa do problema.",
+      "mensagem": ""
+    }
+  ],
+  "config": {
+    "companyName": "S CELL",
+    "tagline": "Tecnologia, confiança e qualidade.",
+    "whatsappNumber": "5527999999999",
+    "instagram": "@scell.iphones",
+    "instagramUrl": "https://instagram.com/scell.iphones",
+    "email": "contato@scell.com.br",
+    "address": "Endereço a definir",
+    "hours": "Segunda a sábado, 9h às 18h",
+    "year": 2026
+  }
+}
