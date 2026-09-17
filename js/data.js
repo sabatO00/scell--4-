@@ -16,26 +16,15 @@ const SCELL_CONFIG = {
 };
 
 /* ---------------- ACESSO AO PAINEL ADMINISTRATIVO ----------------
-   Senha padrão: scell@admin2026  →  TROQUE IMEDIATAMENTE.
-   Para gerar o hash de uma nova senha, abra o Console do navegador (F12) em
-   qualquer página do site e rode:
-     crypto.subtle.digest("SHA-256", new TextEncoder().encode("SUA_NOVA_SENHA"))
-       .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")))
-   Copie o texto gerado e substitua o valor de passwordHash abaixo.
-   IMPORTANTE: este é um painel client-side (sem servidor/banco de dados).
-   Isso dá uma proteção razoável contra acesso casual, mas não é equivalente
-   a um login de servidor real — veja a explicação completa no chat.
+   O login do admin agora é feito por e-mail e senha reais, validados pelo
+   Supabase (banco de dados na nuvem) — não depende mais deste arquivo.
+   Para criar ou trocar o login do admin, acesse supabase.com, entre no
+   projeto da loja, vá em "Authentication" e adicione/edite o usuário lá.
 -------------------------------------------------------------------- */
-const ADMIN_AUTH = {
-  passwordHash: "dac94beed5bee760c782ee39e71da149873054ad9f4ac8fe61aa37ebb3e04661", // scell@admin2026
-  sessionMinutes: 30,
-  maxAttempts: 5,
-  lockMinutes: 10,
-};
 
 function waLink(message) {
-  // Usa o número salvo pelo admin (Store) quando existir; senão, o valor de fábrica.
-  const number = (typeof Store !== "undefined" ? Store.config().whatsappNumber : SCELL_CONFIG.whatsappNumber);
+  // Usa o número salvo no banco de dados quando existir; senão, o valor de fábrica.
+  const number = (typeof getConfig === "function" ? getConfig().whatsappNumber : SCELL_CONFIG.whatsappNumber);
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
 

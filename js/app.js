@@ -7,85 +7,89 @@ let currentFilters = { modelos: [], armazenamentos: [], condicoes: [], bateria: 
 let currentSort = "recentes";
 
 /* ==========================================================================
-   CATÁLOGO PUBLICADO (data/catalog.json)
-   Esse arquivo é o que TODOS os visitantes do site enxergam (não depende
-   do navegador). O admin exporta esse arquivo pela aba Configurações e
-   substitui o data/catalog.json do projeto antes de subir para a hospedagem.
-   As alterações feitas ao vivo no painel (localStorage) continuam tendo
-   prioridade apenas no navegador do próprio admin, para pré-visualizar
-   antes de publicar.
+   SUPABASE — banco de dados na nuvem
+   Tudo que o admin adiciona/edita/remove é salvo aqui e aparece na hora
+   para qualquer pessoa que visitar o site, sem precisar mexer em arquivos.
+   As chaves abaixo são seguras de ficarem públicas no código: a proteção
+   de verdade é feita pelas regras (RLS) configuradas no Supabase, que só
+   permitem ESCRITA para quem estiver logado como admin.
    ========================================================================== */
-let publishedData = null;
-async function loadPublishedData() {
+const SUPABASE_URL = "https://qkmtthqnhznsvdusfybl.supabase.co";
+const SUPABASE_KEY = "sb_publishable_YucgZNMcw4-odOYXY2WE7g_LxlShroa";
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* Cache em memória: carregado uma vez ao abrir o site (e sempre que o admin
+   salva algo), para o resto do app poder ler os dados sem precisar de
+   async/await em toda parte. */
+let _cache = { products: null, services: null, config: null };
+let _isAdmin = false;
+
+async function fetchKV(key, fallback) {
   try {
-    const res = await fetch("data/catalog.json", { cache: "no-store" });
-    if (res.ok) publishedData = await res.json();
-  } catch (e) { /* sem catalog.json publicado ainda — usa os dados de fábrica */ }
+    const { data, error } = await supa.from("kv_store").select("value").eq("key", key).single();
+    if (error || !data) return JSON.parse(JSON.stringify(fallback));
+    return data.value;
+  } catch (e) { return JSON.parse(JSON.stringify(fallback)); }
+}
+async function saveKV(key, value) {
+  try {
+    const { error } = await supa.from("kv_store").upsert({ key, value, updated_at: new Date().toISOString() });
+    return !error;
+  } catch (e) { return false; }
+}
+async function loadAllData() {
+  const [products, services, config] = await Promise.all([
+    fetchKV("products", IPHONES),
+    fetchKV("services", SERVICOS),
+    fetchKV("config", SCELL_CONFIG),
+  ]);
+  _cache = { products, services, config };
 }
 
-/* ==========================================================================
-   STORE — camada de dados persistente (localStorage no navegador do admin)
-   Os arrays IPHONES / SERVICOS / SCELL_CONFIG em data.js são os valores
-   de fábrica. Tudo que o admin adiciona/edita/remove é salvo aqui e passa
-   a ter prioridade sobre os valores de fábrica.
-   ========================================================================== */
+const getProducts = () => _cache.products || IPHONES;
+const getServices = () => _cache.services || SERVICOS;
+const getConfig = () => ({ ...SCELL_CONFIG, ..._cache.config });
+
 const Store = {
-  kProducts: "scell_products_v1",
-  kServices: "scell_services_v1",
-  kConfig: "scell_config_v1",
-
-  products() {
-    const raw = localStorage.getItem(this.kProducts);
-    if (raw) return JSON.parse(raw);
-    if (publishedData && publishedData.products) return JSON.parse(JSON.stringify(publishedData.products));
-    return JSON.parse(JSON.stringify(IPHONES));
+  async saveProducts(list) {
+    const ok = await saveKV("products", list);
+    if (ok) _cache.products = list;
+    return ok;
   },
-  saveProducts(list) {
-    try {
-      localStorage.setItem(this.kProducts, JSON.stringify(list));
-      return true;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
+  async saveServices(list) {
+    const ok = await saveKV("services", list);
+    if (ok) _cache.services = list;
+    return ok;
   },
-
-  services() {
-    const raw = localStorage.getItem(this.kServices);
-    if (raw) return JSON.parse(raw);
-    if (publishedData && publishedData.services) return JSON.parse(JSON.stringify(publishedData.services));
-    return JSON.parse(JSON.stringify(SERVICOS));
+  async saveConfig(cfg) {
+    const ok = await saveKV("config", cfg);
+    if (ok) _cache.config = cfg;
+    return ok;
   },
-  saveServices(list) { localStorage.setItem(this.kServices, JSON.stringify(list)); },
-
-  config() {
-    const raw = localStorage.getItem(this.kConfig);
-    const base = (publishedData && publishedData.config) ? publishedData.config : SCELL_CONFIG;
-    return raw ? { ...base, ...JSON.parse(raw) } : { ...base };
-  },
-  saveConfig(cfg) { localStorage.setItem(this.kConfig, JSON.stringify(cfg)); },
-
-  resetAll() {
-    localStorage.removeItem(this.kProducts);
-    localStorage.removeItem(this.kServices);
-    localStorage.removeItem(this.kConfig);
+  async resetAll() {
+    await Promise.all([
+      saveKV("products", IPHONES),
+      saveKV("services", SERVICOS),
+      saveKV("config", SCELL_CONFIG),
+    ]);
+    await loadAllData();
   },
   exportJSON() {
-    return JSON.stringify({ products: this.products(), services: this.services(), config: this.config() }, null, 2);
+    return JSON.stringify({ products: getProducts(), services: getServices(), config: getConfig() }, null, 2);
   },
-  importJSON(text) {
+  async importJSON(text) {
     const data = JSON.parse(text);
-    if (data.products) this.saveProducts(data.products);
-    if (data.services) this.saveServices(data.services);
-    if (data.config) this.saveConfig(data.config);
+    if (data.products) await this.saveProducts(data.products);
+    if (data.services) await this.saveServices(data.services);
+    if (data.config) await this.saveConfig(data.config);
   },
 };
 
-const getProducts = () => Store.products();
-const getServices = () => Store.services();
-const getConfig = () => Store.config();
-
 /* ---------------- Utils ---------------- */
+/* Imagem de reserva — evita que uma foto quebrada estrague o layout do card */
+const IMG_FALLBACK = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%231E1E22'/%3E%3Cg fill='none' stroke='%236B6B72' stroke-width='10'%3E%3Crect x='140' y='90' width='120' height='220' rx='18'/%3E%3Cline x1='170' y1='120' x2='230' y2='120'/%3E%3Ccircle cx='200' cy='280' r='8' fill='%236B6B72'/%3E%3C/g%3E%3C/svg%3E";
+const imgOnError = `this.onerror=null;this.src='${IMG_FALLBACK}';`;
+
 const money = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const parcelaValor = (preco, n) => money(preco / n);
 const byId = (id) => getProducts().find((p) => p.id === id);
@@ -220,7 +224,7 @@ function renderCartDrawer() {
   footer.classList.remove("hidden");
   wrap.innerHTML = items.map((i) => `
     <div class="cart-item">
-      <img src="${i.imagens[0]}" alt="${i.nome}">
+      <img src="${i.imagens[0]}" alt="${i.nome}" onerror="${imgOnError}">
       <div class="info">
         <h4>${i.nome} ${i.armazenamento}</h4>
         <p>${i.cor} • ${i.condicao}</p>
@@ -254,6 +258,8 @@ function router() {
   if (path === "assistencia") return renderAssistencia();
   if (path === "sobre") return renderSobre();
   if (path === "contato") return renderContato();
+  if (path === "privacidade") return renderPrivacidade();
+  if (path === "termos") return renderTermos();
   if (path === "admin") return renderAdminGate();
   return renderHome();
 }
@@ -347,7 +353,7 @@ function productCard(p) {
   <div class="product-card">
     <a href="#/produto/${p.id}" class="thumb">
       <div class="badges">${statusBadges(p)}</div>
-      <img src="${p.imagens[0]}" alt="${p.nome} ${p.armazenamento}" loading="lazy">
+      <img src="${p.imagens[0]}" alt="${p.nome} ${p.armazenamento}" loading="lazy" onerror="${imgOnError}">
     </a>
     <div class="body">
       <a href="#/produto/${p.id}"><h3>${p.nome}</h3></a>
@@ -514,8 +520,8 @@ function renderProductDetail(id) {
   <section class="section" style="padding-top:24px">
     <div class="container product-detail">
       <div>
-        <div class="gallery-main"><img id="galleryMain" src="${p.imagens[0]}" alt="${p.nome}"></div>
-        ${p.imagens.length > 1 ? `<div class="gallery-thumbs">${p.imagens.map((img, i) => `<img src="${img}" onclick="document.getElementById('galleryMain').src='${img}'">`).join("")}</div>` : ""}
+        <div class="gallery-main"><img id="galleryMain" src="${p.imagens[0]}" alt="${p.nome}" onerror="${imgOnError}"></div>
+        ${p.imagens.length > 1 ? `<div class="gallery-thumbs">${p.imagens.map((img, i) => `<img src="${img}" onclick="document.getElementById('galleryMain').src='${img}'" onerror="${imgOnError}">`).join("")}</div>` : ""}
       </div>
       <div>
         <div class="badges" style="position:static; display:flex; margin-bottom:14px;">${statusBadges(p)}</div>
@@ -757,6 +763,90 @@ function renderContato() {
     e.target.reset();
   });
 }
+/* ---------------- POLÍTICA DE PRIVACIDADE ---------------- */
+function renderPrivacidade() {
+  const cfg = getConfig();
+  app.innerHTML = `
+  <section class="page-hero">
+    <div class="container">
+      <div class="breadcrumb"><a href="#/">Início</a> / Política de Privacidade</div>
+      <h1>Política de Privacidade</h1>
+      <p>Última atualização: ${new Date().toLocaleDateString("pt-BR", { year: "numeric", month: "long" })}</p>
+    </div>
+  </section>
+  <section class="section" style="padding-top:10px">
+    <div class="container" style="max-width:760px">
+      <div class="calc-box" style="max-width:none; line-height:1.8; color:var(--text-dim);">
+        <p style="color:var(--text); margin-bottom:18px;">Este texto é um modelo padrão e não substitui a orientação de um advogado — recomendamos revisão jurídica antes do uso comercial.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">1. Quais dados coletamos</h3>
+        <p>Coletamos apenas os dados que você mesmo nos informa ao entrar em contato: nome, número de WhatsApp e, quando aplicável, informações sobre o aparelho de interesse ou o problema técnico relatado. Não pedimos dados sensíveis nem informações de pagamento diretamente pelo site.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">2. Como usamos esses dados</h3>
+        <p>Usamos as informações fornecidas exclusivamente para dar continuidade ao atendimento iniciado por você, seja para tirar dúvidas sobre um iPhone, prosseguir com uma compra ou avaliar uma solicitação de assistência técnica. Todo o contato final acontece pelo WhatsApp.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">3. Cookies e armazenamento local</h3>
+        <p>Usamos o armazenamento do seu próprio navegador (localStorage) apenas para lembrar os itens do seu carrinho de compras entre uma visita e outra. Essa informação fica salva só no seu aparelho e não é enviada para nenhum servidor.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">4. Compartilhamento com terceiros</h3>
+        <p>Não vendemos, alugamos nem compartilhamos seus dados com terceiros para fins de marketing. Os dados informados são usados apenas pela ${cfg.companyName} para o próprio atendimento.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">5. Seus direitos</h3>
+        <p>De acordo com a Lei Geral de Proteção de Dados (LGPD), você pode solicitar a qualquer momento a confirmação, o acesso, a correção ou a exclusão dos seus dados conosco. Basta entrar em contato pelos canais abaixo.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">6. Contato</h3>
+        <p>Dúvidas sobre esta política podem ser enviadas para <strong style="color:var(--text)">${cfg.email}</strong> ou pelo WhatsApp <strong style="color:var(--text)">${cfg.whatsappNumber}</strong>.</p>
+      </div>
+    </div>
+  </section>
+  `;
+}
+
+/* ---------------- TERMOS DE USO ---------------- */
+function renderTermos() {
+  const cfg = getConfig();
+  app.innerHTML = `
+  <section class="page-hero">
+    <div class="container">
+      <div class="breadcrumb"><a href="#/">Início</a> / Termos de Uso</div>
+      <h1>Termos de Uso</h1>
+      <p>Última atualização: ${new Date().toLocaleDateString("pt-BR", { year: "numeric", month: "long" })}</p>
+    </div>
+  </section>
+  <section class="section" style="padding-top:10px">
+    <div class="container" style="max-width:760px">
+      <div class="calc-box" style="max-width:none; line-height:1.8; color:var(--text-dim);">
+        <p style="color:var(--text); margin-bottom:18px;">Este texto é um modelo padrão e não substitui a orientação de um advogado — recomendamos revisão jurídica antes do uso comercial.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">1. Sobre este site</h3>
+        <p>Este site é um canal de divulgação e contato da ${cfg.companyName}, especializada em venda de iPhones novos e seminovos e em assistência técnica de iPhones. A finalização de compras e o agendamento de serviços acontecem diretamente pelo WhatsApp.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">2. Produtos e preços</h3>
+        <p>As fotos dos aparelhos são meramente ilustrativas quando indicado. Preços, condições, estoque e saúde de bateria informados no site podem ser alterados sem aviso prévio até a confirmação final da compra pelo WhatsApp. Todo aparelho seminovo passa por avaliação antes da venda.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">3. Processo de compra</h3>
+        <p>Ao clicar em "Comprar" ou "Tenho interesse", você será direcionado ao WhatsApp da ${cfg.companyName} com uma mensagem pré-preenchida. A compra só é considerada confirmada após o combinado diretamente com a equipe de atendimento.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">4. Assistência técnica</h3>
+        <p>Os valores exibidos na calculadora de orçamento são estimativas e podem variar após a avaliação técnica presencial do aparelho. Prazos de reparo e garantia sobre o serviço são informados no momento do atendimento.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">5. Garantia dos aparelhos</h3>
+        <p>Cada aparelho vendido possui garantia própria, informada individualmente na página do produto. A garantia cobre defeitos de funcionamento identificados dentro do prazo informado, não cobrindo danos por mau uso, queda ou contato com líquidos.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">6. Propriedade do conteúdo</h3>
+        <p>Marca, logotipo e identidade visual deste site pertencem à ${cfg.companyName}. A reprodução sem autorização não é permitida.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">7. Alterações nestes termos</h3>
+        <p>Estes termos podem ser atualizados a qualquer momento, com a nova versão sempre publicada nesta mesma página.</p>
+
+        <h3 style="color:var(--text); margin:20px 0 8px; font-size:1.05rem;">8. Contato</h3>
+        <p>Dúvidas sobre estes termos podem ser enviadas para <strong style="color:var(--text)">${cfg.email}</strong> ou pelo WhatsApp <strong style="color:var(--text)">${cfg.whatsappNumber}</strong>.</p>
+      </div>
+    </div>
+  </section>
+  `;
+}
+
 function iconWhats(){ return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.5L3 21l2-5.4A8.5 8.5 0 1 1 21 11.5z"/></svg>`; }
 function iconInsta(){ return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor"/></svg>`; }
 function iconPin(){ return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`; }
@@ -767,98 +857,58 @@ function iconEdit(){ return `<svg width="15" height="15" viewBox="0 0 24 24" fil
 
 /* ==========================================================================
    ADMIN — AUTENTICAÇÃO
-   Login protegido por senha com hash SHA-256 (Web Crypto API), sessão com
-   expiração automática e bloqueio temporário após várias tentativas erradas.
-
-   AVISO DE SEGURANÇA (leia): este é um site 100% estático (sem servidor nem
-   banco de dados). Isso significa que não existe uma forma de tornar o
-   login "inquebrável" — qualquer pessoa com bastante conhecimento técnico
-   pode inspecionar o código-fonte no navegador. As medidas abaixo (hash da
-   senha, expiração de sessão, bloqueio por tentativas) elevam bastante a
-   segurança contra acesso casual, mas não substituem um login validado por
-   servidor. Para segurança de nível "produção" com múltiplos usuários e
-   dados centralizados, o ideal é um backend com banco de dados (ex.: um
-   serviço como Supabase/Firebase, ou um back-end próprio).
+   Login real, validado pelo Supabase (servidor) — não depende mais do
+   navegador nem de senha embutida no código. Para criar ou trocar o
+   login do admin, acesse supabase.com → seu projeto → Authentication.
    ========================================================================== */
 const Auth = {
-  kSession: "scell_admin_session",
-  kAttempts: "scell_admin_attempts",
-
-  async hash(text) {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  async tryLogin(email, password) {
+    const { error } = await supa.auth.signInWithPassword({ email, password });
+    if (error) return { ok: false, message: error.message };
+    return { ok: true };
   },
-
-  attemptsData() {
-    try { return JSON.parse(localStorage.getItem(this.kAttempts)) || { count: 0, lockUntil: 0 }; }
-    catch { return { count: 0, lockUntil: 0 }; }
-  },
-  registerFail() {
-    const d = this.attemptsData();
-    d.count += 1;
-    if (d.count >= ADMIN_AUTH.maxAttempts) {
-      d.lockUntil = Date.now() + ADMIN_AUTH.lockMinutes * 60000;
-      d.count = 0;
-    }
-    localStorage.setItem(this.kAttempts, JSON.stringify(d));
-  },
-  clearAttempts() { localStorage.removeItem(this.kAttempts); },
-  isLocked() { return this.attemptsData().lockUntil > Date.now(); },
-  lockRemainingMin() { return Math.ceil((this.attemptsData().lockUntil - Date.now()) / 60000); },
-
-  async tryLogin(password) {
-    if (this.isLocked()) return { ok: false, locked: true };
-    const h = await this.hash(password);
-    if (h === ADMIN_AUTH.passwordHash) {
-      this.clearAttempts();
-      sessionStorage.setItem(this.kSession, JSON.stringify({ exp: Date.now() + ADMIN_AUTH.sessionMinutes * 60000 }));
-      return { ok: true };
-    }
-    this.registerFail();
-    return { ok: false, locked: false };
-  },
-  isAuthenticated() {
-    try {
-      const s = JSON.parse(sessionStorage.getItem(this.kSession));
-      return !!s && s.exp > Date.now();
-    } catch { return false; }
-  },
-  logout() { sessionStorage.removeItem(this.kSession); },
+  isAuthenticated() { return _isAdmin; },
+  async logout() { await supa.auth.signOut(); },
 };
+supa.auth.onAuthStateChange((_event, session) => { _isAdmin = !!session; });
 
 function renderAdminGate() {
   if (Auth.isAuthenticated()) return renderAdminDashboard();
 
-  const locked = Auth.isLocked();
   app.innerHTML = `
   <section class="section" style="padding-top: calc(var(--header-h) + 60px); min-height:80vh; display:flex; align-items:center;">
     <div class="container" style="max-width:420px">
       <div class="calc-box" style="max-width:none">
         <h1 style="font-size:1.5rem; margin-bottom:6px;">Painel administrativo</h1>
         <p style="color:var(--text-dim); font-size:0.88rem; margin-bottom:26px;">Acesso restrito à equipe S CELL.</p>
-        ${locked ? `
-          <p style="color:var(--danger); font-size:0.9rem;">Muitas tentativas incorretas. Tente novamente em ${Auth.lockRemainingMin()} minuto(s).</p>
-        ` : `
-          <form id="adminLoginForm">
-            <div class="field" style="margin-bottom:16px;">
-              <label>Senha de acesso</label>
-              <input required type="password" id="adminPassword" autocomplete="current-password">
-            </div>
-            <button type="submit" class="btn btn-primary btn-block">Entrar</button>
-            <p id="loginError" class="hidden" style="color:var(--danger); font-size:0.82rem; margin-top:12px;">Senha incorreta.</p>
-          </form>
-        `}
+        <form id="adminLoginForm">
+          <div class="field" style="margin-bottom:16px;">
+            <label>E-mail</label>
+            <input required type="email" id="adminEmail" autocomplete="username">
+          </div>
+          <div class="field" style="margin-bottom:16px;">
+            <label>Senha</label>
+            <input required type="password" id="adminPassword" autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="adminLoginBtn">Entrar</button>
+          <p id="loginError" class="hidden" style="color:var(--danger); font-size:0.82rem; margin-top:12px;">E-mail ou senha incorretos.</p>
+        </form>
       </div>
     </div>
   </section>
   `;
-  const form = document.getElementById("adminLoginForm");
-  if (form) form.addEventListener("submit", async (e) => {
+  document.getElementById("adminLoginForm").addEventListener("submit", async (e) => {
     e.preventDefault();
+    const email = document.getElementById("adminEmail").value;
     const pass = document.getElementById("adminPassword").value;
-    const res = await Auth.tryLogin(pass);
+    const btn = document.getElementById("adminLoginBtn");
+    btn.disabled = true; btn.textContent = "Entrando...";
+    const res = await Auth.tryLogin(email, pass);
     if (res.ok) { renderAdminDashboard(); }
-    else { document.getElementById("loginError").classList.remove("hidden"); if (res.locked) renderAdminGate(); }
+    else {
+      document.getElementById("loginError").classList.remove("hidden");
+      btn.disabled = false; btn.textContent = "Entrar";
+    }
   });
 }
 
@@ -891,7 +941,7 @@ function renderAdminDashboard() {
   </div>
   `;
   document.querySelectorAll(".admin-nav a[data-tab]").forEach(a => a.addEventListener("click", () => { adminTab = a.dataset.tab; renderAdminDashboard(); }));
-  document.getElementById("adminLogoutBtn").addEventListener("click", () => { Auth.logout(); location.hash = "#/admin"; router(); });
+  document.getElementById("adminLogoutBtn").addEventListener("click", async () => { await Auth.logout(); location.hash = "#/admin"; router(); });
 
   const main = document.getElementById("adminMain");
   if (adminTab === "dashboard") main.innerHTML = adminDashboardHTML(produtos, servicos, disponiveis, vendidos);
@@ -950,10 +1000,10 @@ function adminProductsHTML(produtos) {
 function bindProductsAdmin() {
   document.getElementById("btnAddProduct").addEventListener("click", () => openProductModal(null));
   document.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => openProductModal(b.dataset.edit)));
-  document.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
     if (!confirm("Remover este iPhone do catálogo?")) return;
     const list = getProducts().filter(p => p.id !== b.dataset.del);
-    Store.saveProducts(list);
+    await Store.saveProducts(list);
     toast("iPhone removido");
     renderAdminDashboard();
   }));
@@ -1052,7 +1102,7 @@ function openProductModal(id) {
 
   document.getElementById("pmOverlay").addEventListener("click", () => host.innerHTML = "");
   document.getElementById("pmClose").addEventListener("click", () => host.innerHTML = "");
-  document.getElementById("pmSave").addEventListener("click", () => {
+  document.getElementById("pmSave").addEventListener("click", async (e) => {
     const form = document.getElementById("productForm");
     if (!form.reportValidity()) return;
     if (!pmImages.length) { toast("Adicione ao menos uma foto do aparelho"); return; }
@@ -1073,8 +1123,9 @@ function openProductModal(id) {
     };
     const idx = list.findIndex(x => x.id === novo.id);
     if (idx >= 0) list[idx] = novo; else list.push(novo);
-    const ok = Store.saveProducts(list);
-    if (!ok) { toast("Armazenamento cheio — remova fotos ou produtos antigos e tente de novo"); return; }
+    e.target.disabled = true; e.target.textContent = "Salvando...";
+    const ok = await Store.saveProducts(list);
+    if (!ok) { toast("Não foi possível salvar — confira sua conexão e tente de novo"); e.target.disabled = false; e.target.textContent = "Salvar"; return; }
     host.innerHTML = "";
     toast(p ? "iPhone atualizado" : "iPhone adicionado");
     renderAdminDashboard();
@@ -1112,10 +1163,10 @@ function adminServicesHTML(servicos) {
 function bindServicesAdmin() {
   document.getElementById("btnAddService").addEventListener("click", () => openServiceModal(null));
   document.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => openServiceModal(b.dataset.edit)));
-  document.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
     if (!confirm("Remover este serviço?")) return;
     const list = getServices().filter(s => s.id !== b.dataset.del);
-    Store.saveServices(list);
+    await Store.saveServices(list);
     toast("Serviço removido");
     renderAdminDashboard();
   }));
@@ -1145,7 +1196,7 @@ function openServiceModal(id) {
   `;
   document.getElementById("smOverlay").addEventListener("click", () => host.innerHTML = "");
   document.getElementById("smClose").addEventListener("click", () => host.innerHTML = "");
-  document.getElementById("smSave").addEventListener("click", () => {
+  document.getElementById("smSave").addEventListener("click", async (e) => {
     const form = document.getElementById("serviceForm");
     if (!form.reportValidity()) return;
     const d = Object.fromEntries(new FormData(form).entries());
@@ -1157,7 +1208,9 @@ function openServiceModal(id) {
     };
     const idx = list.findIndex(x => x.id === novo.id);
     if (idx >= 0) list[idx] = novo; else list.push(novo);
-    Store.saveServices(list);
+    e.target.disabled = true; e.target.textContent = "Salvando...";
+    const ok = await Store.saveServices(list);
+    if (!ok) { toast("Não foi possível salvar — confira sua conexão e tente de novo"); e.target.disabled = false; e.target.textContent = "Salvar"; return; }
     host.innerHTML = "";
     toast(s ? "Serviço atualizado" : "Serviço adicionado");
     renderAdminDashboard();
@@ -1178,21 +1231,11 @@ function adminConfigHTML(cfg) {
         <div class="field"><label>Horário de funcionamento</label><input name="hours" value="${cfg.hours}"></div>
         <div class="field full"><label>Endereço</label><input name="address" value="${cfg.address}"></div>
       </div>
-      <button type="submit" class="btn btn-primary mt-lg">Salvar configurações</button>
+      <button type="submit" class="btn btn-primary mt-lg" id="configSaveBtn">Salvar configurações</button>
     </form>
+    <p class="calc-note" style="max-width:640px; margin: -18px 0 30px;">Qualquer alteração salva aqui (ou nas abas Produtos e Serviços) já aparece na hora para todos os visitantes do site — não precisa reenviar nem publicar nada.</p>
 
-    <h2 style="font-size:1.05rem; margin-bottom:6px;">Publicar para todos os visitantes</h2>
-    <div class="calc-box" style="max-width:640px;">
-      <p style="color:var(--text-dim); font-size:0.88rem; margin-bottom:16px;">
-        Tudo que você edita aqui só aparece, por enquanto, <strong>neste navegador</strong> (é assim que você consegue
-        pré-visualizar antes de publicar). Para que os produtos, serviços e fotos apareçam para todo mundo que visita
-        o site, baixe o arquivo abaixo e substitua o arquivo <code>data/catalog.json</code> dentro da pasta do projeto
-        por ele — depois suba a pasta de novo na hospedagem (o mesmo processo de arrastar de sempre).
-      </p>
-      <button class="btn btn-primary" id="btnPublish">Baixar catalog.json para publicar</button>
-    </div>
-
-    <h2 style="font-size:1.05rem; margin: 30px 0 12px;">Backup pessoal</h2>
+    <h2 style="font-size:1.05rem; margin-bottom:12px;">Backup</h2>
     <div class="calc-box" style="max-width:640px; display:flex; gap:12px; flex-wrap:wrap;">
       <button class="btn btn-outline" id="btnExport">Exportar backup (JSON)</button>
       <label class="btn btn-outline" style="cursor:pointer;">Importar backup
@@ -1200,31 +1243,18 @@ function adminConfigHTML(cfg) {
       </label>
       <button class="btn btn-outline" id="btnReset" style="color:var(--danger); border-color: var(--danger);">Restaurar padrão de fábrica</button>
     </div>
-    <p class="calc-note" style="max-width:640px; margin-top:10px;">Os dados (incluindo as fotos que você envia) ficam salvos apenas neste navegador até você publicar. Uso atual: ${storageUsageLabel()}.</p>
+    <p class="calc-note" style="max-width:640px; margin-top:10px;">Exportar cria um arquivo de segurança com tudo (produtos, serviços, fotos e configurações). "Restaurar padrão de fábrica" apaga tudo que foi personalizado e volta aos dados de exemplo — vale para todos os visitantes.</p>
   `;
 }
-function storageUsageLabel() {
-  try {
-    let bytes = 0;
-    for (const k in localStorage) if (k.startsWith("scell_")) bytes += (localStorage.getItem(k) || "").length;
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(1)}MB de ~5MB disponíveis no navegador`;
-  } catch { return "indisponível"; }
-}
 function bindConfigAdmin() {
-  document.getElementById("configForm").addEventListener("submit", (e) => {
+  document.getElementById("configForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target).entries());
-    Store.saveConfig({ ...getConfig(), ...d });
-    toast("Configurações salvas");
-  });
-  document.getElementById("btnPublish").addEventListener("click", () => {
-    const blob = new Blob([Store.exportJSON()], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "catalog.json";
-    a.click();
-    toast("catalog.json baixado — troque o arquivo em data/ e publique de novo");
+    const btn = document.getElementById("configSaveBtn");
+    btn.disabled = true; btn.textContent = "Salvando...";
+    const ok = await Store.saveConfig({ ...getConfig(), ...d });
+    btn.disabled = false; btn.textContent = "Salvar configurações";
+    toast(ok ? "Configurações salvas" : "Não foi possível salvar — confira sua conexão");
   });
   document.getElementById("btnExport").addEventListener("click", () => {
     const blob = new Blob([Store.exportJSON()], { type: "application/json" });
@@ -1233,19 +1263,19 @@ function bindConfigAdmin() {
     a.download = "scell-backup.json";
     a.click();
   });
-  document.getElementById("fileImport").addEventListener("change", (e) => {
+  document.getElementById("fileImport").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      try { Store.importJSON(reader.result); toast("Dados importados"); renderAdminDashboard(); }
+    reader.onload = async () => {
+      try { await Store.importJSON(reader.result); toast("Dados importados"); renderAdminDashboard(); }
       catch { toast("Arquivo inválido"); }
     };
     reader.readAsText(file);
   });
-  document.getElementById("btnReset").addEventListener("click", () => {
-    if (!confirm("Isso vai apagar todas as alterações feitas no painel e voltar aos dados de exemplo. Continuar?")) return;
-    Store.resetAll();
+  document.getElementById("btnReset").addEventListener("click", async () => {
+    if (!confirm("Isso vai apagar todas as alterações feitas no painel e voltar aos dados de exemplo, para todos os visitantes. Continuar?")) return;
+    await Store.resetAll();
     toast("Dados restaurados ao padrão");
     renderAdminDashboard();
   });
@@ -1264,7 +1294,9 @@ function applyGlobalLinks() {
   document.getElementById("footerYear").textContent = `© ${SCELL_CONFIG.year} ${cfg.companyName}. Todos os direitos reservados.`;
 }
 document.addEventListener("DOMContentLoaded", async () => {
-  await loadPublishedData();
+  const { data: { session } } = await supa.auth.getSession();
+  _isAdmin = !!session;
+  await loadAllData();
   applyGlobalLinks();
   updateCartUI();
   router();
